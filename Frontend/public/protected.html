@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" 
+      content="default-src 'self';
+               connect-src 'self' http://localhost:5000;
+               script-src 'self' 'unsafe-inline';
+               style-src 'self' 'unsafe-inline'">
+    <title>Protected Area</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <!-- Секция для авторизованных пользователей -->
+    <section id="protected-section" style="display: none;">
+        <h1>Welcome to the Protected Area!</h1>
+        <div id="user-data">
+            <!-- Сюда загрузится информация о пользователе -->
+        </div>
+        <button id="logout-btn">Logout</button>
+    </section>
+
+    <!-- Секция для неавторизованных (может быть скрыта) -->
+    <section id="auth-section">
+        <p>You are not authorized. Redirecting to login...</p>
+    </section>
+
+    <script src="/js/auth.js" type="module"></script>
+    <script src="/js/main.js" type="module"></script>
+</body>
+</html>

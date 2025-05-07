@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" 
+      content="default-src 'self';
+               connect-src 'self' http://localhost:5000;
+               script-src 'self' 'unsafe-inline';
+               style-src 'self' 'unsafe-inline'">
+    <title>JWT Auth App</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Welcome!</h1>
+        <div id="auth-section">
+            <a href="login.html" class="btn">Login</a>
+            <a href="register.html" class="btn">Register</a>
+        </div>
+        <div id="protected-section" style="display: none;">
+            <h2>Protected Content</h2>
+            <button id="logout-btn" class="btn">Logout</button>
+        </div>
+    </div>
+    <!-- Только ваши скрипты -->
+    <script src="js/main.js" type="module"></script>
+</body>
+</html>

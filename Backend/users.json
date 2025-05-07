@@ -1,0 +1,14 @@
+[
+  {
+    "id": "37806857-a31e-4430-918e-18a0bb054269",
+    "username": "qwerty",
+    "password": "$2a$10$4CpYwTdOgDHQRF241A8aF.ch8X1sGp577AQ9AzAle2gs.q6nEgl76",
+    "created_at": "2025-05-05T18:03:59.385Z"
+  },
+  {
+    "id": "90c5e8b7-4c5d-4902-8cf6-3375baef9036",
+    "username": "kira",
+    "password": "$2a$10$/QUGQpIKGRiKmAN8JI9WceAYQEmCbFBs1ICtxBsf98MYKdr8gCck2",
+    "created_at": "2025-05-07T22:24:53.481Z"
+  }
+]
