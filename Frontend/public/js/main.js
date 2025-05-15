@@ -1,78 +1,124 @@
-import { checkAuth, logout, fetchWithAuth, API_URL } from './auth.js';
+import { logout, fetchWithAuth, API_URL, checkAuth } from './auth.js';
 
-// Перенаправление если не авторизован
-if (!checkAuth() && window.location.pathname.includes('protected.html')) {
-    window.location.href = 'login.html';
-    throw new Error('Redirecting to login');
+function setupLogoutButton() {
+    const logoutBtn = document.getElementById('logout-btn');
+    if (!logoutBtn) {
+      console.error('Logout button not found!');
+      return;
+    }
+  
+    logoutBtn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      console.log('Logout button clicked'); // Логирование
+      
+      try {
+        logoutBtn.disabled = true;
+        logoutBtn.textContent = 'Выход...';
+        
+        await logout();
+      } catch (error) {
+        console.error('Logout handler error:', error);
+        logoutBtn.disabled = false;
+        logoutBtn.textContent = '🚪 Выйти';
+        alert('Ошибка при выходе: ' + error.message);
+      }
+    });
 }
 
-// Проверка авторизации при загрузке страницы
-document.addEventListener('DOMContentLoaded', async () => { // Добавлено async
-    // Элементы страницы
+// Инициализация темы
+function initTheme() {
+    // Проверяем сохраненную тему
+    const savedTheme = localStorage.getItem('theme');
+    const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    
+    // Устанавливаем начальную тему
+    const initialTheme = savedTheme || (systemPrefersDark ? 'dark' : 'light');
+    applyTheme(initialTheme);
+    
+    // Обработчик кнопки
+    const themeToggle = document.getElementById('theme-toggle');
+    if (themeToggle) {
+      themeToggle.addEventListener('click', toggleTheme);
+    }
+}
+  
+function applyTheme(theme) {
+    document.body.classList.toggle('dark', theme === 'dark');
+    localStorage.setItem('theme', theme);
+}
+  
+function toggleTheme() {
+    const isDark = document.body.classList.contains('dark');
+    applyTheme(isDark ? 'light' : 'dark');
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+    initTheme();
+    setupLogoutButton();
     const authSection = document.getElementById('auth-section');
     const protectedSection = document.getElementById('protected-section');
     const logoutBtn = document.getElementById('logout-btn');
-    const userData = document.getElementById('user-data');
+    const refreshBtn = document.getElementById('refresh-data');
 
-    // Если на странице есть защищённая секция
-    if (protectedSection) {
-        try {
-            // Проверяем авторизацию асинхронно
-            const authValid = await checkAuth(); // Теперь await работает правильно
-            if (!authValid) {
-                logout();
-                return;
-            }
-
-            // Скрываем auth-section если он есть
-            if (authSection) {
-                authSection.style.display = 'none';
-            }
-            
-            // Показываем защищённый контент
-            protectedSection.style.display = 'block';
-            
-            // Загружаем данные
-            await fetchProtectedData(); // Добавлен await
-        } catch (error) {
-            console.error('Auth check failed:', error);
-            logout();
+    try {
+        const authValid = await checkAuth();
+        if (!authValid) {
+            window.location.href = 'login.html';
+            return;
         }
-    }
 
-    // Обработчик кнопки выхода
-    if (logoutBtn) {
-        logoutBtn.addEventListener('click', logout);
+        if (authSection) authSection.style.display = 'none';
+        if (protectedSection) protectedSection.style.display = 'block';
+        
+        await fetchProtectedData();
+
+        // Обработчики событий
+        if (logoutBtn) {
+            logoutBtn.addEventListener('click', logout);
+        }
+        
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', fetchProtectedData);
+        }
+
+    } catch (error) {
+        console.error('Auth check failed:', error);
+        logout();
     }
 });
 
-// Запрос к защищённому API (оставляем без изменений)
 async function fetchProtectedData() {
     const userData = document.getElementById('user-data');
     if (!userData) return;
     
     try {
         userData.innerHTML = '<p>Loading...</p>';
+        
         const response = await fetchWithAuth(`${API_URL}/protected`);
         
-        if (!response.ok) {
-            throw new Error('Failed to fetch protected data');
-        }
+        console.log('Response status:', response.status); // Добавьте лог
         
-        if (response.status === 401) {
-            logout();
-            return;
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
         }
         
         const data = await response.json();
+        console.log('Received data:', data); // Логируем данные
+        
         userData.innerHTML = `
-            <p>User ID: ${data.data.user_id}</p>
-            <p>Username: ${data.data.username}</p>
-            <p>${data.data.message}</p>
+            <p>User ID: ${data.data?.user_id || data.user?.id || 'N/A'}</p>
+            <p>Username: ${data.data?.username || data.user?.username || 'N/A'}</p>
+            <p>${data.data?.message || data.message || 'Welcome!'}</p>
         `;
     } catch (error) {
-        userData.innerHTML = '<p class="error">Error loading data</p>';
-        console.error('Error:', error);
-        logout();
+        console.error('Fetch error:', error);
+        userData.innerHTML = `
+            <p class="error">Error loading data</p>
+            <p>${error.message}</p>
+        `;
+        
+        if (error.message.includes('401')) {
+            logout(); // Разлогиниваем при 401 ошибке
+        }
     }
 }

@@ -10,5 +10,23 @@
     "username": "kira",
     "password": "$2a$10$/QUGQpIKGRiKmAN8JI9WceAYQEmCbFBs1ICtxBsf98MYKdr8gCck2",
     "created_at": "2025-05-07T22:24:53.481Z"
+  },
+  {
+    "id": "f8919fc2-daa5-450e-ba77-0d5753603a5b",
+    "username": "test",
+    "password": "$2a$10$RYlnrt.uxLjdBIj.h.4NvueNzlwMrvQZK/va8xp0m9FrB4CmUgxKO",
+    "createdAt": "2025-05-14T23:13:20.972Z"
+  },
+  {
+    "id": "04795907-8df0-4336-bd1e-d64df308b3a4",
+    "username": "user",
+    "password": "$2a$10$zX75b.cxqZ7KVf68F0lOVepQFM6ZRnB5601jjYFGU0HD.Xn6KHqlK",
+    "createdAt": "2025-05-14T23:23:09.300Z"
+  },
+  {
+    "id": "c17e170c-4d6e-4f75-8b95-56d945e3b62d",
+    "username": "user123",
+    "password": "$2a$10$6tRPQ.JZabW0vtyjGAp3U.U1oE1yrihcWte2l3rwuS88zV5Wev57q",
+    "createdAt": "2025-05-14T23:50:32.444Z"
   }
 ]

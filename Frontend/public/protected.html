@@ -18,7 +18,6 @@
         <div id="user-data">
             <!-- Сюда загрузится информация о пользователе -->
         </div>
-        <button id="logout-btn">Logout</button>
     </section>
 
     <!-- Секция для неавторизованных (может быть скрыта) -->
@@ -26,6 +25,13 @@
         <p>You are not authorized. Redirecting to login...</p>
     </section>
 
+    <div class="controls">
+        <button id="theme-toggle" class="btn">🌓 Тема</button>
+        <button id="refresh-data" class="btn">🔄 Обновить данные</button>
+        <button id="logout-btn" class="btn">🚪 Выйти</button>
+      </div>
+
+      
     <script src="/js/auth.js" type="module"></script>
     <script src="/js/main.js" type="module"></script>
 </body>

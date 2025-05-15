@@ -1,32 +1,53 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const jwt = require('jsonwebtoken');
+const session = require('express-session');
+const FileStore = require('session-file-store')(session);
 const bcrypt = require('bcryptjs');
 const fs = require('fs').promises;
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 
 const app = express();
-
-app.use(cors({
-  origin: 'http://localhost:5500',
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true,
-  exposedHeaders: ['Authorization']
-}));
-app.options('*', cors());
-
-const morgan = require('morgan');
-app.use(morgan('dev'));
-app.use(express.json());
-
-const SECRET_KEY = process.env.SECRET_KEY || 'fallback_secret_key';
 const PORT = process.env.PORT || 5000;
 const USERS_FILE = path.join(__dirname, 'users.json');
 
-// Инициализация файла с пользователями
+// Middleware
+app.use(cors({
+  origin: 'http://localhost:5500',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+  exposedHeaders: ['set-cookie']
+}));
+
+app.use(express.json());
+app.use(helmet());
+
+// Настройка сессий
+app.use(session({
+  store: new FileStore({ path: './sessions' }),
+  secret: process.env.SESSION_SECRET || 'fallback_secret_key',
+  resave: false,
+  saveUninitialized: false,
+  cookie: { 
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 24 * 60 * 60 * 1000 // 1 день
+  }
+}));
+
+// Лимитер запросов
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 минут
+  max: 100
+});
+app.use(limiter);
+
+// Инициализация файла пользователей
 async function initUsersFile() {
   try {
     await fs.access(USERS_FILE);
@@ -35,236 +56,203 @@ async function initUsersFile() {
   }
 }
 
-// Middleware для проверки JWT
-function authenticateToken(req, res, next) {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader?.split(' ')[1];
-    
-    if (!token) {
-      return res.status(401).json({ 
-        status: 'error',
-        message: 'Authorization token is required' 
-      });
-    }
-  
-    jwt.verify(token, SECRET_KEY, (err, user) => {
-      if (err) {
-        return res.status(403).json({ 
-          status: 'error',
-          message: 'Invalid or expired token' 
-        });
-      }
-      req.user = user;
-      next();
+// Middleware для проверки сессии
+function checkSession(req, res, next) {
+  if (!req.session.userId) {
+    return res.status(401).json({ 
+      status: 'error',
+      error: 'Unauthorized',
+      message: 'Please login first'
     });
   }
+  next();
+}
 
 // Регистрация
 app.post('/register', async (req, res) => {
-    try {
-        const { username, password } = req.body;
+  try {
+    const { username, password } = req.body;
 
-        // Валидация входных данных
-        if (!username || !password) {
-            return res.status(400).json({ 
-                status: 'error',
-                message: 'Username and password are required' 
-            });
-        }
-
-        if (username.length < 4) {
-            return res.status(400).json({
-                status: 'error',
-                message: 'Username must be at least 4 characters'
-            });
-        }
-
-        if (password.length < 6) {
-            return res.status(400).json({
-                status: 'error', 
-                message: 'Password must be at least 6 characters'
-            });
-        }
-
-        // Чтение и проверка файла пользователей
-        let users;
-        try {
-            const data = await fs.readFile(USERS_FILE, 'utf8');
-            users = data ? JSON.parse(data) : [];
-        } catch (error) {
-            if (error.code === 'ENOENT') {
-                // Файл не существует - создаем новый
-                users = [];
-                await fs.writeFile(USERS_FILE, JSON.stringify(users));
-            } else {
-                console.error('Error reading users file:', error);
-                return res.status(500).json({
-                    status: 'error',
-                    message: 'Server configuration error'
-                });
-            }
-        }
-
-        // Проверка уникальности username (case insensitive)
-        const normalizedUsername = username.trim().toLowerCase();
-        if (users.some(u => u.username.toLowerCase() === normalizedUsername)) {
-            return res.status(409).json({
-                status: 'error',
-                message: 'Username already taken'
-            });
-        }
-
-        // Хеширование пароля
-        const hashedPassword = await bcrypt.hash(password, 10);
-
-        const newUser = {
-            id: uuidv4(), // Лучше использовать UUID вместо последовательных ID
-            username: username.trim(),
-            password: hashedPassword,
-            created_at: new Date().toISOString()
-        };
-
-        users.push(newUser);
-
-        // Запись в файл с обработкой ошибок
-        try {
-            await fs.writeFile(USERS_FILE, JSON.stringify(users, null, 2));
-        } catch (error) {
-            console.error('Error writing to users file:', error);
-            return res.status(500).json({
-                status: 'error',
-                message: 'Could not save user data'
-            });
-        }
-
-        // Генерация токена
-        const token = jwt.sign(
-            {
-                user_id: newUser.id,
-                username: newUser.username
-            },
-            SECRET_KEY,
-            { expiresIn: '1h' } // Увеличенное время жизни токена
-        );
-
-        // Успешный ответ
-        res.status(201).json({
-            status: 'success',
-            data: {
-                token,
-                user: {
-                    id: newUser.id,
-                    username: newUser.username,
-                    created_at: newUser.created_at
-                }
-            }
-        });
-
-    } catch (error) {
-        console.error('Registration error:', error);
-        res.status(500).json({
-            status: 'error',
-            message: process.env.NODE_ENV === 'development' 
-                ? error.message 
-                : 'Internal server error'
-        });
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Username and password required' });
     }
+
+    const users = JSON.parse(await fs.readFile(USERS_FILE));
+    if (users.some(u => u.username === username)) {
+      return res.status(409).json({ error: 'Username already exists' });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const newUser = {
+      id: uuidv4(),
+      username,
+      password: hashedPassword,
+      createdAt: new Date().toISOString()
+    };
+
+    users.push(newUser);
+    await fs.writeFile(USERS_FILE, JSON.stringify(users, null, 2));
+
+    req.session.userId = newUser.id;
+    res.status(201).json({ 
+      message: 'User registered', 
+      user: { id: newUser.id, username }
+    });
+  } catch (error) {
+    console.error('Registration error:', error);
+    res.status(500).json({ error: 'Registration failed' });
+  }
 });
 
 // Логин
 app.post('/login', async (req, res) => {
-    try {
-      const { username, password } = req.body;
-      
-      if (!username || !password) {
-        return res.status(400).json({ 
-          status: 'error',
-          message: 'Username and password required!' 
-        });
+  try {
+    const { username, password } = req.body;
+    const users = JSON.parse(await fs.readFile(USERS_FILE));
+    const user = users.find(u => u.username === username);
+
+    if (!user || !(await bcrypt.compare(password, user.password))) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    req.session.userId = user.id;
+    res.json({ 
+      message: 'Login successful', 
+      user: { id: user.id, username }
+    });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+// Профиль пользователя
+app.get('/profile', checkSession, async (req, res) => {
+  try {
+    const users = JSON.parse(await fs.readFile(USERS_FILE));
+    const user = users.find(u => u.id === req.session.userId);
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json({ 
+      user: { 
+        id: user.id, 
+        username: user.username,
+        createdAt: user.createdAt
       }
-  
-      const users = JSON.parse(await fs.readFile(USERS_FILE));
-      const user = users.find(u => u.username === username);
-      
-      if (!user) {
-        return res.status(404).json({ 
-          status: 'error',
-          message: 'User not found!' 
-        });
-      }
-  
-      const validPassword = await bcrypt.compare(password, user.password);
-      if (!validPassword) {
-        return res.status(401).json({ 
-          status: 'error',
-          message: 'Wrong password!' 
-        });
-      }
-  
-      const token = jwt.sign(
-        { 
-          user_id: user.id,
-          username: user.username
-        },
-        SECRET_KEY,
-        { expiresIn: '1h' } // Унифицированное время жизни токена
-      );
-  
-      res.json({
-        status: 'success',
-        data: {
-          token,
-          user: {
-            id: user.id,
-            username: user.username
-          }
-        }
-      });
-    } catch (error) {
-      console.error('Login error:', error);
-      res.status(500).json({
+    });
+  } catch (error) {
+    console.error('Profile error:', error);
+    res.status(500).json({ error: 'Failed to get profile' });
+  }
+});
+
+// Выход
+app.post('/logout', (req, res) => {
+  console.log('Logout requested'); // Логирование
+  req.session.destroy(err => {
+    if (err) {
+      console.error('Session destroy error:', err);
+      return res.status(500).json({ 
         status: 'error',
-        message: process.env.NODE_ENV === 'development' 
-          ? error.message 
-          : 'Internal server error'
+        message: 'Could not destroy session'
       });
     }
-  });
 
-// Защищённый маршрут
-app.get('/protected', authenticateToken, (req, res) => {
-    try {
-      res.json({
-        status: 'success',
-        data: {
-          message: 'This is protected data!',
-          user_id: req.user.user_id,
-          username: req.user.username
-        }
-      });
-    } catch (error) {
-      console.error('Protected route error:', error);
-      res.status(500).json({
-        status: 'error',
-        message: 'Internal server error'
-      });
+    res.clearCookie('connect.sid', {
+      path: '/',
+      httpOnly: true,
+      sameSite: 'lax'
+    });
+    
+    console.log('Logout successful'); // Логирование
+    res.json({ status: 'success', message: 'Logged out' });
+  });
+});
+
+// Кэшированные данные
+let dataCache = {
+  timestamp: 0,
+  data: null
+};
+
+app.get('/data', checkSession, (req, res) => {
+  const now = Date.now();
+  if (dataCache.timestamp > now - 60 * 1000) {
+    return res.json({ data: dataCache.data, cached: true });
+  }
+
+  const newData = {
+    items: ['Item 1', 'Item 2'],
+    generatedAt: new Date().toISOString()
+  };
+
+  dataCache = {
+    timestamp: now,
+    data: newData
+  };
+
+  res.json({ data: newData, cached: false });
+});
+
+// Защищенный роут
+app.get('/protected', checkSession, async (req, res) => {
+  try {
+    const users = JSON.parse(await fs.readFile(USERS_FILE));
+    const user = users.find(u => u.id === req.session.userId);
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
     }
-  });
 
-// Инициализация и запуск сервера
+    res.json({
+      status: 'success',
+      data: {
+        user_id: user.id,
+        username: user.username,
+        message: 'This is protected data!'
+      }
+    });
+  } catch (error) {
+    console.error('Protected route error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+
+// Обработка 404
+app.use((req, res) => {
+  res.status(404).json({
+    status: 'error',
+    error: 'Not Found',
+    message: 'The requested resource was not found'
+  });
+});
+// Глобальный обработчик ошибок
+app.use((err, req, res, next) => {
+  console.error('Global error:', err);
+  res.status(500).json({
+    status: 'error',
+    error: 'Internal Server Error',
+    message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
+  });
+});
+
+// Запуск сервера
 async function startServer() {
   await initUsersFile();
   app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
+    console.log('Available routes:');
+    console.log('POST /register - User registration');
+    console.log('POST /login - User login');
+    console.log('GET /profile - User profile (protected)');
+    console.log('GET /protected - Protected data (protected)');
+    console.log('GET /data - Cached data (protected)');
+    console.log('POST /logout - User logout');
   });
 }
-
-app.use((err, req, res, next) => {
-    console.error('Global error:', err);
-    res.status(500).json({
-      status: 'error',
-      message: 'Internal server error'
-    });
-});
 
 startServer();

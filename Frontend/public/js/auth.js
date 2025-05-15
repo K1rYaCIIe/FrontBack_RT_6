@@ -1,59 +1,53 @@
-// Конфиг API
-const API_URL = "http://localhost:5000";
+export const API_URL = 'http://localhost:5000';
 
-// Сохранить JWT в localStorage
-function saveToken(token) {
-    localStorage.setItem("jwt_token", token);
+// Проверка авторизации
+export async function isAuth() {
+  try {
+    const response = await fetch(`${API_URL}/profile`, {
+      credentials: 'include'
+    });
+    return response.ok;
+  } catch (error) {
+    return false;
+  }
 }
 
-// Получить JWT
-function getToken() {
-    return localStorage.getItem("jwt_token");
+// Защищенные запросы
+export async function fetchWithAuth(url, options = {}) {
+  return fetch(url, {
+    ...options,
+    credentials: 'include'
+  });
 }
 
-// Удалить JWT (выход)
-function logout() {
-    localStorage.removeItem("jwt_token");
-    window.location.href = "login.html";
-}
+// Выход из системы
+export async function logout() {
+  try {
+    console.log('Attempting logout...'); // Логирование
+    const response = await fetch(`${API_URL}/logout`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
 
-async function checkAuth() {
-    const token = getToken();
-    if (!token) return false;
+    console.log('Logout response:', response.status); // Логирование
     
-    try {
-        const response = await fetch(`${API_URL}/protected`, {
-            headers: {
-                'Authorization': `Bearer ${token}`
-            }
-        });
-        return response.ok;
-    } catch (error) {
-        console.error('Auth check failed:', error);
-        return false;
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || 'Logout failed');
     }
+
+    localStorage.removeItem('theme');
+    window.location.href = '/login.html';
+  } catch (error) {
+    console.error('Logout failed:', error);
+    window.location.href = '/login.html';
+  }
 }
 
-// Запрос с авторизацией
-async function fetchWithAuth(url, options = {}) {
-    const token = getToken();
-    if (!token) throw new Error("No token");
-
-    const headers = {
-        "Authorization": `Bearer ${token}`,
-        "Content-Type": "application/json",
-        ...options.headers
-    };
-
-    return fetch(url, { ...options, headers });
+// Проверка авторизации (альтернативное название)
+export async function checkAuth() {
+  return isAuth();
 }
-
-// Экспортируем все функции одним объектом
-export {
-    API_URL,
-    saveToken,
-    getToken,
-    logout,
-    checkAuth,
-    fetchWithAuth
-};
